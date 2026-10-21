@@ -1,15 +1,11 @@
 import streamlit as st
 import pandas as pd
 import plotly.express as px
-import docx
-from docx import Document
-from pptx import Presentation
-from pptx.util import Inches
 import io
 import os
 
 # ---------------------------------------------------------
-# 1. إعدادات الصفحة والتصميم
+# 1. إعدادات الصفحة
 # ---------------------------------------------------------
 st.set_page_config(
     page_title="لوحة تحكم ومحول ملفات التوريق والتخصيم 2026",
@@ -31,17 +27,20 @@ st.title("📊 لوحة تحكم التخصيم والتوريق ومحول ال
 st.markdown("---")
 
 # ---------------------------------------------------------
-# 2. دوال تحويل الجداول بين الصيغ (Excel / Word / PowerPoint)
+# 2. دوال تحويل الصيغ وتخزينها مؤقتاً لتسريع الأداء
 # ---------------------------------------------------------
+@st.cache_data
 def convert_df_to_excel(df):
     output = io.BytesIO()
     with pd.ExcelWriter(output, engine='openpyxl') as writer:
         df.to_excel(writer, index=False, sheet_name='Data')
     return output.getvalue()
 
-def convert_df_to_word(df, title="جدول البيانات المستخرج"):
+@st.cache_data
+def convert_df_to_word(df):
+    from docx import Document
     doc = Document()
-    doc.add_heading(title, level=1)
+    doc.add_heading("جدول البيانات المستخرج", level=1)
     table = doc.add_table(rows=df.shape[0] + 1, cols=df.shape[1])
     table.style = 'Table Grid'
     for j, col_name in enumerate(df.columns):
@@ -53,7 +52,10 @@ def convert_df_to_word(df, title="جدول البيانات المستخرج"):
     doc.save(output)
     return output.getvalue()
 
+@st.cache_data
 def convert_df_to_pptx(df):
+    from pptx import Presentation
+    from pptx.util import Inches
     prs = Presentation()
     blank_slide_layout = prs.slide_layouts[6]
     slide = prs.slides.add_slide(blank_slide_layout)
@@ -71,7 +73,7 @@ def convert_df_to_pptx(df):
     return output.getvalue()
 
 # ---------------------------------------------------------
-# 3. القائمة الجانبية: رفع الملفات لقراءتها وتحويلها
+# 3. القائمة الجانبية ومعالجة الملفات
 # ---------------------------------------------------------
 st.sidebar.header("📁 رفع بيانات جديدة وتحويلها")
 uploaded_file = st.sidebar.file_uploader(
@@ -86,7 +88,6 @@ if uploaded_file is not None:
     file_name = uploaded_file.name
     file_ext = os.path.splitext(file_name)[1].lower()
 
-    # أ) ملفات Excel
     if file_ext in ['.xlsx', '.xls', '.csv']:
         try:
             uploaded_df = pd.read_csv(uploaded_file) if file_ext == '.csv' else pd.read_excel(uploaded_file)
@@ -94,9 +95,9 @@ if uploaded_file is not None:
         except Exception as e:
             st.sidebar.error(f"خطأ في قراءة Excel: {e}")
 
-    # ب) ملفات Word
     elif file_ext == '.docx':
         try:
+            from docx import Document
             doc = Document(uploaded_file)
             tables_data = []
             for table in doc.tables:
@@ -110,9 +111,9 @@ if uploaded_file is not None:
         except Exception as e:
             st.sidebar.error(f"خطأ في قراءة Word: {e}")
 
-    # ج) ملفات PowerPoint
     elif file_ext == '.pptx':
         try:
+            from pptx import Presentation
             prs = Presentation(uploaded_file)
             tables_data = []
             for slide in prs.slides:
@@ -133,7 +134,7 @@ if uploaded_file is not None:
             st.sidebar.error(f"خطأ في قراءة PowerPoint: {e}")
 
 # ---------------------------------------------------------
-# 4. عرض خيارات التحويل والتحميل إذا تم رفع ملف
+# 4. خيارات التحويل والتحميل
 # ---------------------------------------------------------
 if uploaded_df is not None:
     st.markdown('<div class="card-header">🔄 تحويل صيغة الملف المرفوع وتحميله</div>', unsafe_allow_html=True)
@@ -168,7 +169,7 @@ if extracted_text_pptx and uploaded_df is None:
         st.write(f"• {line}")
 
 # ---------------------------------------------------------
-# 5. عرض الداشبورد والبيانات المالية الأصلية لـ 2026
+# 5. البيانات المالية الرئيسية لـ 2026
 # ---------------------------------------------------------
 st.markdown("---")
 
@@ -193,7 +194,6 @@ df_sec = pd.DataFrame({
 tot_count = df_card_normal['Total Count'].sum() + df_auto['Total Count'].sum() + df_sec['Total Count'].sum()
 tot_val = df_card_normal['Total Formal AR'].sum() + df_auto['Total Formal AR'].sum() + df_sec['Total Sum of AR'].sum()
 
-# المؤشرات
 c1, c2, c3 = st.columns(3)
 with c1:
     st.markdown(f'<div class="kpi-card"><div class="kpi-title">إجمالي عدد الملفات والعقود</div><div class="kpi-value">{tot_count:,} ملف</div></div>', unsafe_allow_html=True)
@@ -204,7 +204,6 @@ with c3:
 
 st.write("")
 
-# التبويبات والرسوم البيانية
 tab1, tab2, tab3 = st.tabs(["💳 الكروت والطلب العادي", "🚗 عقود السيارات (Auto)", "🏦 التوريق (Securitization)"])
 
 with tab1:
