@@ -3,9 +3,10 @@ import pandas as pd
 import plotly.express as px
 import docx
 from pptx import Presentation
+import os
 
 # ---------------------------------------------------------
-# 1. إعدادات الصفحة والتصميم الداكن الأنيق
+# 1. إعدادات الصفحة
 # ---------------------------------------------------------
 st.set_page_config(
     page_title="لوحة تحكم التوريق والتخصيم 2026",
@@ -27,33 +28,35 @@ st.title("📊 لوحة تحكم عمليات التخصيم والتوريق (D
 st.markdown("---")
 
 # ---------------------------------------------------------
-# 2. القائمة الجانبية لرفع الملفات (Excel, Word, PowerPoint)
+# 2. رفع الملفات مع دعم Word, PowerPoint, Excel
 # ---------------------------------------------------------
 st.sidebar.header("📁 رفع بيانات جديدة")
+
 uploaded_file = st.sidebar.file_uploader(
-    "قم برفع ملف Excel (.xlsx), Word (.docx) أو PowerPoint (.pptx)", 
-    type=["xlsx", "csv", "docx", "pptx"]
+    "اختر ملف من جهازك (Excel, Word, PowerPoint)", 
+    type=["xlsx", "xls", "csv", "docx", "pptx"]
 )
 
 uploaded_df = None
 extracted_text_pptx = []
 
 if uploaded_file is not None:
-    file_ext = uploaded_file.name.split('.')[-1].lower()
-    
-    # قراءة Excel / CSV
-    if file_ext in ['xlsx', 'csv']:
+    file_name = uploaded_file.name
+    file_ext = os.path.splitext(file_name)[1].lower()
+
+    # --- أ) معالجة ملفات الإكسيل والـ CSV ---
+    if file_ext in ['.xlsx', '.xls', '.csv']:
         try:
-            if file_ext == 'csv':
+            if file_ext == '.csv':
                 uploaded_df = pd.read_csv(uploaded_file)
             else:
                 uploaded_df = pd.read_excel(uploaded_file)
-            st.sidebar.success("تم تحميل ملف Excel بنجاح!")
+            st.sidebar.success(f"تم تحميل الملف بنجاح: {file_name}")
         except Exception as e:
-            st.sidebar.error(f"خطأ في قراءة ملف Excel: {e}")
-            
-    # قراءة Word (.docx)
-    elif file_ext == 'docx':
+            st.sidebar.error(f"خطأ أثناء قراءة ملف Excel: {e}")
+
+    # --- ب) معالجة ملفات الـ Word (.docx) ---
+    elif file_ext == '.docx':
         try:
             doc = docx.Document(uploaded_file)
             tables_data = []
@@ -61,16 +64,16 @@ if uploaded_file is not None:
                 for row in table.rows:
                     tables_data.append([cell.text.strip() for cell in row.cells])
             
-            if tables_data:
+            if len(tables_data) > 1:
                 uploaded_df = pd.DataFrame(tables_data[1:], columns=tables_data[0])
-                st.sidebar.success("تم استخراج البيانات من ملف Word بنجاح!")
+                st.sidebar.success(f"تم قراءة جداول ملف Word بنجاح: {file_name}")
             else:
-                st.sidebar.warning("لم يتم العثور على جداول داخل ملف Word.")
+                st.sidebar.warning("لم يتم العثور على جداول بيانات داخل ملف الـ Word.")
         except Exception as e:
-            st.sidebar.error(f"خطأ في قراءة ملف Word: {e}")
+            st.sidebar.error(f"خطأ أثناء قراءة ملف Word: {e}")
 
-    # قراءة PowerPoint (.pptx)
-    elif file_ext == 'pptx':
+    # --- ج) معالجة ملفات الـ PowerPoint (.pptx) ---
+    elif file_ext == '.pptx':
         try:
             prs = Presentation(uploaded_file)
             tables_data = []
@@ -84,35 +87,34 @@ if uploaded_file is not None:
                     elif shape.has_text_frame:
                         for paragraph in shape.text_frame.paragraphs:
                             if paragraph.text.strip():
-                                extracted_text_pptx.append(f"• {paragraph.text.strip()}")
+                                extracted_text_pptx.append(paragraph.text.strip())
             
-            if tables_data:
+            if len(tables_data) > 1:
                 uploaded_df = pd.DataFrame(tables_data[1:], columns=tables_data[0])
-                st.sidebar.success("تم استخراج الجدول من ملف PowerPoint بنجاح!")
+                st.sidebar.success(f"تم استخراج جداول البوربوينت بنجاح: {file_name}")
             elif extracted_text_pptx:
-                st.sidebar.success("تم استخراج النصوص من PowerPoint بنجاح!")
+                st.sidebar.success(f"تم استخراج نصوص الشرائح بنجاح: {file_name}")
             else:
-                st.sidebar.warning("الملف لا يحتوي على نصوص أو جداول قابلة للقراءة.")
+                st.sidebar.warning("لم يتم العثور على جداول أو نصوص داخل العرض التقديمي.")
         except Exception as e:
-            st.sidebar.error(f"خطأ في قراءة ملف PowerPoint: {e}")
+            st.sidebar.error(f"خطأ أثناء قراءة ملف PowerPoint: {e}")
 
 # ---------------------------------------------------------
-# 3. عرض الملف المرفوع إذا وجد
+# 3. عرض نتائج الملف المرفوع
 # ---------------------------------------------------------
 if uploaded_df is not None:
-    st.markdown('<div class="card-header">📄 الجداول المستخرجة من الملف المرفوع</div>', unsafe_allow_html=True)
+    st.markdown('<div class="card-header">📄 البيانات والجداول المستخرجة من الملف المرفوع</div>', unsafe_allow_html=True)
     st.dataframe(uploaded_df, use_container_width=True)
 
 if extracted_text_pptx:
-    st.markdown('<div class="card-header">📊 النصوص المستخرجة من PowerPoint</div>', unsafe_allow_html=True)
-    for line in extracted_text_pptx:
-        st.write(line)
+    st.markdown('<div class="card-header">📊 النصوص المستخرجة من شرائح PowerPoint</div>', unsafe_allow_html=True)
+    for text_line in extracted_text_pptx:
+        st.write(f"• {text_line}")
 
 # ---------------------------------------------------------
-# 4. عرض البيانات الرئيسية والرسوم البيانية (Discount & Securitization 2026)
+# 4. البيانات الرئيسية الافتراضية
 # ---------------------------------------------------------
 if uploaded_df is None and not extracted_text_pptx:
-    # تجهيز البيانات الأساسية
     df_card_normal = pd.DataFrame({
         'البنك': ['ايجي بنك', 'العربي الافريقي', 'التنمية الصناعية'],
         'Total Count': [36375, 108278, 4076],
@@ -131,11 +133,9 @@ if uploaded_df is None and not extracted_text_pptx:
         'Total Sum of AR': [683310830.35]
     })
 
-    # حساب المؤشرات
     tot_count = df_card_normal['Total Count'].sum() + df_auto['Total Count'].sum() + df_sec['Total Count'].sum()
     tot_val = df_card_normal['Total Formal AR'].sum() + df_auto['Total Formal AR'].sum() + df_sec['Total Sum of AR'].sum()
 
-    # عرض كروت المؤشرات
     c1, c2, c3 = st.columns(3)
     with c1:
         st.markdown(f'<div class="kpi-card"><div class="kpi-title">إجمالي عدد الملفات والعقود</div><div class="kpi-value">{tot_count:,} ملف</div></div>', unsafe_allow_html=True)
@@ -146,7 +146,6 @@ if uploaded_df is None and not extracted_text_pptx:
 
     st.write("")
 
-    # عرض التبويبات والرسوم البيانية
     tab1, tab2, tab3 = st.tabs(["💳 الكروت والطلب العادي", "🚗 عقود السيارات (Auto)", "🏦 التوريق (Securitization)"])
 
     with tab1:
