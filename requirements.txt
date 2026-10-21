@@ -2,3 +2,5 @@ streamlit
 plotly
 pandas
 openpyxl
+python-docx
+python-pptx
