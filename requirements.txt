@@ -1,6 +1,6 @@
 streamlit
-plotly
 pandas
+plotly
 openpyxl
 python-docx
 python-pptx
