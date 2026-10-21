@@ -41,8 +41,8 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-st.title("📊 نظام تحليل محفظة العقود والماليات (2026)")
-st.caption("تحليل تلقائي دقيق للمبالغ المالية (Formal AR, Formal Principal, Formal Interest) وتوزيع الحالة")
+st.title("📊 نظام تحليل محفظة العقود والماليات والسنوات (2026)")
+st.caption("تحليل تلقائي لمبالغ Formal AR وتحليل التراكمات المالية بحسب الشهر والسنة")
 st.markdown("---")
 
 # ---------------------------------------------------------
@@ -62,27 +62,27 @@ if uploaded_file is not None:
         df = pd.read_excel(uploaded_file)
         st.sidebar.success(f"تم تحميل الملف بنجاح: {uploaded_file.name}")
         
-        # --- أ) اكتشاف الأعمدة الرئيسية تلقائياً ---
+        # --- أ) التعرف التلقائي على الأعمدة ---
         status_col = None
-        credit_col = None
         ar_col = None
         principal_col = None
         interest_col = None
+        date_col = None
         
         for col in df.columns:
             c_str = str(col).lower()
             if "حاله" in c_str or "الحاله" in str(col):
                 status_col = col
-            elif "creditamount" in c_str or "مبلغ" in str(col):
-                credit_col = col
             elif "formal ar" in c_str or "ar" in c_str:
                 ar_col = col
             elif "formal principal" in c_str or "princ" in c_str:
                 principal_col = col
             elif "formal interest" in c_str or "interest" in c_str:
                 interest_col = col
+            elif "date" in c_str or "تاريخ" in c_str or "printed" in c_str or "شريحة" in c_str or "سنة" in c_str:
+                date_col = col
 
-        # التعيين الإفتراضي في حال تباين أسماء الأعمدة
+        # التعيين الإفتراضي
         if not status_col:
             status_col = "الحاله" if "الحاله" in df.columns else df.columns[2]
         if not ar_col:
@@ -92,66 +92,35 @@ if uploaded_file is not None:
         if not interest_col:
             interest_col = "totalinterest_asoff" if "totalinterest_asoff" in df.columns else df.columns[9]
             
-        # --- ب) حساب قيم المؤشرات الكلية (KPIs) ---
+        # --- ب) حساب كروت KPIs ---
         total_records = len(df)
         sum_ar = df[ar_col].sum() if ar_col in df.columns else 0
         sum_principal = df[principal_col].sum() if principal_col in df.columns else 0
         sum_interest = df[interest_col].sum() if interest_col in df.columns else 0
 
-        # --- ج) عرض كروت المؤشرات الكلية المعدلة ---
         c1, c2, c3, c4 = st.columns(4)
-        
         with c1:
-            st.markdown(f'''
-                <div class="kpi-card">
-                    <div class="kpi-title">إجمالي عدد السجلات / العقود</div>
-                    <div class="kpi-value">{total_records:,}</div>
-                    <div class="kpi-sub">عقد مسجل</div>
-                </div>
-            ''', unsafe_allow_html=True)
-            
+            st.markdown(f'<div class="kpi-card"><div class="kpi-title">إجمالي عدد العقود</div><div class="kpi-value">{total_records:,}</div><div class="kpi-sub">عقد مسجل</div></div>', unsafe_allow_html=True)
         with c2:
-            st.markdown(f'''
-                <div class="kpi-card">
-                    <div class="kpi-title">إجمالي (Formal AR)</div>
-                    <div class="kpi-value">{sum_ar:,.2f}</div>
-                    <div class="kpi-sub">ج.م (القيمة المستحقة)</div>
-                </div>
-            ''', unsafe_allow_html=True)
-
+            st.markdown(f'<div class="kpi-card"><div class="kpi-title">إجمالي (Formal AR)</div><div class="kpi-value">{sum_ar:,.2f}</div><div class="kpi-sub">ج.م (القيمة المستحقة)</div></div>', unsafe_allow_html=True)
         with c3:
-            st.markdown(f'''
-                <div class="kpi-card">
-                    <div class="kpi-title">إجمالي (Formal Principal)</div>
-                    <div class="kpi-value">{sum_principal:,.2f}</div>
-                    <div class="kpi-sub">ج.م (أصل الدين)</div>
-                </div>
-            ''', unsafe_allow_html=True)
-
+            st.markdown(f'<div class="kpi-card"><div class="kpi-title">إجمالي (Formal Principal)</div><div class="kpi-value">{sum_principal:,.2f}</div><div class="kpi-sub">ج.م (أصل الدين)</div></div>', unsafe_allow_html=True)
         with c4:
-            st.markdown(f'''
-                <div class="kpi-card">
-                    <div class="kpi-title">إجمالي (Formal Interest)</div>
-                    <div class="kpi-value">{sum_interest:,.2f}</div>
-                    <div class="kpi-sub">ج.م (إجمالي الفوائد)</div>
-                </div>
-            ''', unsafe_allow_html=True)
+            st.markdown(f'<div class="kpi-card"><div class="kpi-title">إجمالي (Formal Interest)</div><div class="kpi-value">{sum_interest:,.2f}</div><div class="kpi-sub">ج.م (إجمالي الفوائد)</div></div>', unsafe_allow_html=True)
 
         st.write("")
 
-        # --- د) الرسم البياني المخصص لعمود "الحاله" ---
-        st.markdown(f'<div class="card-header">📈 توزيع المبالغ بحسب ({status_col})</div>', unsafe_allow_html=True)
+        # --- ج) الرسم البياني يقرأ من مبلغ Formal AR وموزع بالحالة ---
+        st.markdown(f'<div class="card-header">📈 توزيع مبالغ (Formal AR) بحسب ({status_col})</div>', unsafe_allow_html=True)
         
-        # تجميع البيانات حسب الحالة
-        metric_for_chart = credit_col if credit_col in df.columns else ar_col
-        df_grouped = df.groupby(status_col, as_index=False)[metric_for_chart].sum()
+        df_grouped_status = df.groupby(status_col, as_index=False)[ar_col].sum()
 
         fig = px.bar(
-            df_grouped, 
+            df_grouped_status, 
             x=status_col, 
-            y=metric_for_chart,
+            y=ar_col,
             text_auto='.3s',
-            title=f"توزيع إجمالي {metric_for_chart} بحسب {status_col}",
+            title=f"توزيع إجمالي Formal AR بحسب {status_col}",
             color_discrete_sequence=['#00c4cc']
         )
         
@@ -160,26 +129,50 @@ if uploaded_file is not None:
             plot_bgcolor='rgba(0,0,0,0)', 
             font_color='#ffffff',
             xaxis_title=str(status_col),
-            yaxis_title=str(metric_for_chart),
+            yaxis_title="Formal AR (جنيه مصري)",
             xaxis={'categoryorder': 'total descending'}
         )
-        
         st.plotly_chart(fig, use_container_width=True)
 
-        # --- هـ) عرض جدول البيانات التفصيلي ---
-        st.markdown('<div class="card-header">📋 جدول التفاصيل الكامل للبيانات</div>', unsafe_allow_html=True)
-        st.dataframe(df, use_container_width=True)
+        # --- د) تحليلات التراكم بالشهر والسنة (Monthly & Yearly Accumulation) ---
+        st.markdown('<div class="card-header">🗓️ جدول تحليل التراكمات المالية بحسب الشهر والسنة (أعلى كميات متراكمة)</div>', unsafe_allow_html=True)
+
+        # معالجة عمود التواريخ لاستخراج السنة والشهر
+        if date_col and date_col in df.columns:
+            df['تاريخ_المعاملة'] = pd.to_datetime(df[date_col], errors='coerce')
+            df['السنة'] = df['تاريخ_المعاملة'].dt.year.fillna(2026).astype(int)
+            df['الشهر'] = df['تاريخ_المعاملة'].dt.strftime('%B / %m').fillna('Jan / 01')
+        else:
+            df['السنة'] = 2026
+            df['الشهر'] = 'يناير (Jan)'
+
+        # جدول التجميع حسب السنة والشهر
+        df_accum = df.groupby(['السنة', 'الشهر'], as_index=False).agg({
+            ar_col: 'sum',
+            principal_col: 'sum',
+            interest_col: 'sum',
+            status_col: 'count'
+        }).rename(columns={status_col: 'عدد العقود', ar_col: 'Formal AR المتراكم'})
+
+        # فرز لمعرفة أضخم التراكمات
+        df_accum = df_accum.sort_values(by='Formal AR المتراكم', ascending=False)
+
+        # عرض التنبيه بأضخم سنة وشهر متراكم
+        top_row = df_accum.iloc[0] if len(df_accum) > 0 else None
+        if top_row is not None:
+            st.info(f"🔥 **أكبر كمية متراكمة في المحفظة:** سنة **{top_row['السنة']}** - شهر **{top_row['الشهر']}** إجمالي متراكم **{top_row['Formal AR المتراكم']:,.2f} ج.م** بـ **{top_row['عدد العقود']:,} عقد**.")
+
+        st.dataframe(df_accum, use_container_width=True)
 
     except Exception as e:
-        st.error(f"حدث خطأ أثناء قراءة الملف: {e}")
+        st.error(f"حدث خطأ أثناء قراءة البيانات: {e}")
 
 else:
-    # --- 4. العرض الافتراضي في حالة عدم رفع ملف ---
-    st.info("💡 قم برفع ملف الإكسيل لعرض تحليل Formal AR و Formal Principal و Formal Interest ومخطط الحالة تلقائياً.")
+    # --- العرض الافتراضي ---
+    st.info("💡 قم برفع ملف الإكسيل لمشاهدة تحليل Formal AR وتراكمات السنوات والأشهر تلقائياً.")
     
     df_demo = pd.DataFrame({
         'الحاله': ['كارت امان', 'كارت اسلامي', 'نورمال اسلامي', 'زيادة الحد الائتماني', 'نورمال', 'B2E'],
-        'CreditAmount': [123892778, 542027243, 470097341, 20425350, 40772122, 4862150],
         'AR': [89165737, 477430445, 752773409, 12171344, 34844098, 3549054],
         'totalprinc_asoff': [65736465, 350502583, 448755291, 9727388, 21804801, 2763485],
         'totalinterest_asoff': [23429272, 126927862, 304018118, 2443956, 13039298, 785569]
@@ -196,6 +189,6 @@ else:
         st.markdown(f'<div class="kpi-card"><div class="kpi-title">Formal Interest</div><div class="kpi-value">{df_demo["totalinterest_asoff"].sum():,.2f} ج.م</div></div>', unsafe_allow_html=True)
 
     st.write("")
-    fig = px.bar(df_demo, x='الحاله', y='CreditAmount', text_auto='.3s', title="توزيع CreditAmount بحسب الحالة (عرض افتراضي)", color_discrete_sequence=['#00c4cc'])
+    fig = px.bar(df_demo, x='الحاله', y='AR', text_auto='.3s', title="توزيع Formal AR بحسب الحالة (عرض افتراضي)", color_discrete_sequence=['#00c4cc'])
     fig.update_layout(paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)', font_color='#ffffff')
     st.plotly_chart(fig, use_container_width=True)
