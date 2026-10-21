@@ -73,14 +73,14 @@ st.markdown("""
 # ---------------------------------------------------------
 # 3. القائمة الجانبية وربط الـ API Key
 # ---------------------------------------------------------
-st.sidebar.header("🔑 مفتاح الذكاء الاصطناعي (Gemini)")
+st.sidebar.header("🔑 إعدادات المفتاح والملف")
 
-# يمكنك كتابة مفتاحك مباشرة بين التنصيص أسفله إن أردت تثبيته دائماً:
-DEFAULT_API_KEY = "" 
+# ضع مفتاحك الذي نسخته بين التنصيص هنا لتثبيته دائماً
+DEFAULT_API_KEY = "ضع_المفتاح_هنا" 
 
-api_key = st.sidebar.text_input("أدخل Gemini API Key:", value=DEFAULT_API_KEY, type="password")
+api_key = st.sidebar.text_input("Gemini API Key:", value=DEFAULT_API_KEY, type="password")
 
-if api_key:
+if api_key and api_key != "ضع_المفتاح_هنا":
     genai.configure(api_key=api_key)
 
 st.sidebar.header("📁 رفع ملف الإكسيل")
@@ -96,7 +96,6 @@ if uploaded_file is not None:
         
         df_raw = pd.read_excel(xls, sheet_name=selected_sheet)
         
-        # اكتشاف بداية الصفوف
         header_row = 0
         for idx in range(min(15, len(df_raw))):
             row_str = " ".join(df_raw.iloc[idx].dropna().astype(str).values)
@@ -126,7 +125,7 @@ if uploaded_file is not None:
         # ب) التحليل التنفيذي بواسطة الذكاء الاصطناعي (Gemini AI)
         st.markdown('<div class="section-title">🤖 التقرير والتحليل التنفيذي الذكي (AI Analysis)</div>', unsafe_allow_html=True)
         
-        if api_key:
+        if api_key and api_key != "ضع_المفتاح_هنا":
             if st.button("✨ توليد التقرير المالي بالذكاء الاصطناعي"):
                 with st.spinner("جاري قراءة وتحليل بيانات الشيت بـ Gemini AI..."):
                     summary_stats = df.describe().to_string()
@@ -153,7 +152,7 @@ if uploaded_file is not None:
                     
                     st.markdown(f'<div class="ai-box">{response.text}</div>', unsafe_allow_html=True)
         else:
-            st.warning("🔑 يرجى إلصاق مفتاح Gemini API Key في الشريط الجانبي لتفعيل محرك الـ AI.")
+            st.warning("🔑 يرجى وضع مفتاح Gemini API Key في الكود أو في الشريط الجانبي لتفعيل محرك الـ AI.")
 
         # ج) الرسوم البيانية والتجميع الفوري
         st.markdown('<div class="section-title">⚙️ التجميع والرسوم البيانية المخصصة لجميع الأعمدة</div>', unsafe_allow_html=True)
