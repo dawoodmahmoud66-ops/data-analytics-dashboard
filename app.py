@@ -1,231 +1,209 @@
 import streamlit as st
 import pandas as pd
 import plotly.express as px
-import io
-import os
+import plotly.graph_objects as go
 
 # ---------------------------------------------------------
-# 1. إعدادات الصفحة
+# 1. إعدادات الصفحة والتصميم العالي الجودة
 # ---------------------------------------------------------
 st.set_page_config(
-    page_title="لوحة تحكم ومحول ملفات التوريق والتخصيم 2026",
-    page_icon="📊",
-    layout="wide"
+    page_title="منصة العرض التفاعلية لملفات الإكسيل 2026",
+    page_icon="📈",
+    layout="wide",
+    initial_sidebar_state="expanded"
 )
 
+# نمط تصميم داكن وفاخر للبرزنتيشن
 st.markdown("""
     <style>
-    .stApp { background-color: #071e33; color: #ffffff; direction: rtl; text-align: right; }
-    .kpi-card { background-color: #0b2847; border-radius: 12px; padding: 20px; border-right: 5px solid #00c4cc; box-shadow: 0 4px 6px rgba(0,0,0,0.3); }
-    .kpi-title { color: #90caf9; font-size: 14px; font-weight: bold; }
-    .kpi-value { color: #00c4cc; font-size: 24px; font-weight: bold; margin-top: 5px; }
-    .card-header { background-color: #0b2847; color: #ffffff; padding: 10px 15px; font-weight: bold; font-size: 16px; border-radius: 6px; margin-bottom: 15px; border-right: 3px solid #00c4cc; }
+    .stApp { background-color: #0b132b; color: #ffffff; direction: rtl; text-align: right; }
+    
+    /* بطاقات KPIs الرئيسية */
+    .kpi-card {
+        background: linear-gradient(135deg, #1c2541 0%, #0b132b 100%);
+        border-radius: 12px;
+        padding: 20px;
+        border: 1px solid #3a506b;
+        border-right: 6px solid #48cae4;
+        box-shadow: 0 8px 16px rgba(0,0,0,0.4);
+        transition: transform 0.2s ease-in-out;
+    }
+    .kpi-title { color: #90e0ef; font-size: 14px; font-weight: 600; margin-bottom: 8px; }
+    .kpi-value { color: #ffffff; font-size: 26px; font-weight: bold; }
+    .kpi-sub { color: #48cae4; font-size: 12px; margin-top: 5px; }
+
+    /* رأس الأقسام */
+    .section-header {
+        background-color: #1c2541;
+        color: #00b4d8;
+        padding: 12px 20px;
+        font-weight: bold;
+        font-size: 18px;
+        border-radius: 8px;
+        margin: 20px 0 15px 0;
+        border-right: 4px solid #90e0ef;
+    }
     </style>
 """, unsafe_allow_html=True)
 
-st.title("📊 لوحة تحكم التخصيم والتوريق ومحول الملفات - 2026")
+st.title("📈 منصة العرض والتحليل التفاعلي لبيانات الإكسيل (Excel Presentation Hub)")
+st.caption("عرض وسلاسة فائقة في تحليل الأرقام والبيانات المالية لعام 2026")
 st.markdown("---")
 
 # ---------------------------------------------------------
-# 2. دوال تحويل الصيغ وتخزينها مؤقتاً لتسريع الأداء
+# 2. قراءة ملفات الإكسيل بأقصى سرعة (Fast Caching)
 # ---------------------------------------------------------
-@st.cache_data
-def convert_df_to_excel(df):
-    output = io.BytesIO()
-    with pd.ExcelWriter(output, engine='openpyxl') as writer:
-        df.to_excel(writer, index=False, sheet_name='Data')
-    return output.getvalue()
-
-@st.cache_data
-def convert_df_to_word(df):
-    from docx import Document
-    doc = Document()
-    doc.add_heading("جدول البيانات المستخرج", level=1)
-    table = doc.add_table(rows=df.shape[0] + 1, cols=df.shape[1])
-    table.style = 'Table Grid'
-    for j, col_name in enumerate(df.columns):
-        table.cell(0, j).text = str(col_name)
-    for i, row in enumerate(df.values):
-        for j, val in enumerate(row):
-            table.cell(i + 1, j).text = str(val) if pd.notna(val) else ""
-    output = io.BytesIO()
-    doc.save(output)
-    return output.getvalue()
-
-@st.cache_data
-def convert_df_to_pptx(df):
-    from pptx import Presentation
-    from pptx.util import Inches
-    prs = Presentation()
-    blank_slide_layout = prs.slide_layouts[6]
-    slide = prs.slides.add_slide(blank_slide_layout)
-    rows, cols = df.shape[0] + 1, df.shape[1]
-    left, top, width, height = Inches(0.5), Inches(0.5), Inches(9), Inches(5)
-    table_shape = slide.shapes.add_table(rows, cols, left, top, width, height)
-    table = table_shape.table
-    for j, col_name in enumerate(df.columns):
-        table.cell(0, j).text = str(col_name)
-    for i, row in enumerate(df.values):
-        for j, val in enumerate(row):
-            table.cell(i + 1, j).text = str(val) if pd.notna(val) else ""
-    output = io.BytesIO()
-    prs.save(output)
-    return output.getvalue()
+@st.cache_data(ttl=3600, show_spinner="جاري تحميل ومعالجة ملف الإكسيل بسرعة...")
+def load_excel_file(file):
+    try:
+        # قراءة كافة الشيتات أو الشيت الأول
+        xls = pd.ExcelFile(file)
+        sheet_data = {}
+        for sheet_name in xls.sheet_names:
+            sheet_data[sheet_name] = pd.read_excel(xls, sheet_name=sheet_name)
+        return sheet_data
+    except Exception as e:
+        return None
 
 # ---------------------------------------------------------
-# 3. القائمة الجانبية ومعالجة الملفات
+# 3. القائمة الجانبية: رفع الملف والفلاتر التفاعلية
 # ---------------------------------------------------------
-st.sidebar.header("📁 رفع بيانات جديدة وتحويلها")
+st.sidebar.header("📁 إدارة العرض والبيانات")
+
 uploaded_file = st.sidebar.file_uploader(
-    "قم برفع ملف (Excel, Word, PowerPoint)", 
-    type=["xlsx", "xls", "csv", "docx", "pptx"]
+    "رفع ملف Excel (.xlsx, .xls)", 
+    type=["xlsx", "xls"]
 )
 
-uploaded_df = None
-extracted_text_pptx = []
+sheet_data = None
+selected_df = None
 
 if uploaded_file is not None:
-    file_name = uploaded_file.name
-    file_ext = os.path.splitext(file_name)[1].lower()
-
-    if file_ext in ['.xlsx', '.xls', '.csv']:
-        try:
-            uploaded_df = pd.read_csv(uploaded_file) if file_ext == '.csv' else pd.read_excel(uploaded_file)
-            st.sidebar.success(f"تم تحميل الملف: {file_name}")
-        except Exception as e:
-            st.sidebar.error(f"خطأ في قراءة Excel: {e}")
-
-    elif file_ext == '.docx':
-        try:
-            from docx import Document
-            doc = Document(uploaded_file)
-            tables_data = []
-            for table in doc.tables:
-                for row in table.rows:
-                    tables_data.append([cell.text.strip() for cell in row.cells])
-            if len(tables_data) > 1:
-                uploaded_df = pd.DataFrame(tables_data[1:], columns=tables_data[0])
-                st.sidebar.success(f"تم تحميل الجدول من Word: {file_name}")
-            else:
-                st.sidebar.warning("لم يتم العثور على جداول في ملف Word.")
-        except Exception as e:
-            st.sidebar.error(f"خطأ في قراءة Word: {e}")
-
-    elif file_ext == '.pptx':
-        try:
-            from pptx import Presentation
-            prs = Presentation(uploaded_file)
-            tables_data = []
-            for slide in prs.slides:
-                for shape in slide.shapes:
-                    if shape.has_table:
-                        for row in shape.table.rows:
-                            tables_data.append([cell.text.strip() for cell in row.cells])
-                    elif shape.has_text_frame:
-                        for paragraph in shape.text_frame.paragraphs:
-                            if paragraph.text.strip():
-                                extracted_text_pptx.append(paragraph.text.strip())
-            if len(tables_data) > 1:
-                uploaded_df = pd.DataFrame(tables_data[1:], columns=tables_data[0])
-                st.sidebar.success(f"تم تحميل الجدول من PowerPoint: {file_name}")
-            elif extracted_text_pptx:
-                st.sidebar.success(f"تم استخراج النصوص من PowerPoint: {file_name}")
-        except Exception as e:
-            st.sidebar.error(f"خطأ في قراءة PowerPoint: {e}")
-
-# ---------------------------------------------------------
-# 4. خيارات التحويل والتحميل
-# ---------------------------------------------------------
-if uploaded_df is not None:
-    st.markdown('<div class="card-header">🔄 تحويل صيغة الملف المرفوع وتحميله</div>', unsafe_allow_html=True)
-    
-    col_sel, col_btn = st.columns([2, 1])
-    with col_sel:
-        target_format = st.selectbox(
-            "اختر الصيغة الجديدة لتحميل الملف بها:",
-            ["PowerPoint (.pptx)", "Word (.docx)", "Excel (.xlsx)"]
-        )
+    sheet_data = load_excel_file(uploaded_file)
+    if sheet_data:
+        st.sidebar.success(f"تم تحميل الملف: {uploaded_file.name}")
         
-    with col_btn:
-        st.write("")
-        st.write("")
-        if target_format == "Excel (.xlsx)":
-            file_bytes = convert_df_to_excel(uploaded_df)
-            st.download_button("📥 تحميل كـ Excel", file_bytes, file_name="Converted_Data.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
-        elif target_format == "Word (.docx)":
-            file_bytes = convert_df_to_word(uploaded_df)
-            st.download_button("📥 تحميل كـ Word", file_bytes, file_name="Converted_Data.docx", mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document")
-        elif target_format == "PowerPoint (.pptx)":
-            file_bytes = convert_df_to_pptx(uploaded_df)
-            st.download_button("📥 تحميل كـ PowerPoint", file_bytes, file_name="Converted_Data.pptx", mime="application/vnd.openxmlformats-officedocument.presentationml.presentation")
-
-    st.markdown("---")
-    st.subheader("📋 معاينة البيانات المستخرجة:")
-    st.dataframe(uploaded_df, use_container_width=True)
-
-if extracted_text_pptx and uploaded_df is None:
-    st.markdown('<div class="card-header">📊 النصوص المستخرجة من PowerPoint</div>', unsafe_allow_html=True)
-    for line in extracted_text_pptx:
-        st.write(f"• {line}")
+        # اختيار ورقة العمل (Sheet)
+        sheet_names = list(sheet_data.keys())
+        selected_sheet = st.sidebar.selectbox("اختر الشيت للعرض:", sheet_names)
+        selected_df = sheet_data[selected_sheet]
+else:
+    st.sidebar.info("💡 يمكنك رفع ملف إكسيل من القائمة للبدء أو استعراض العرض الافتراضي.")
 
 # ---------------------------------------------------------
-# 5. البيانات المالية الرئيسية لـ 2026
+# 4. عرض البرزنتيشن والرسوم التفاعلية
 # ---------------------------------------------------------
-st.markdown("---")
+if selected_df is not None:
+    st.markdown(f'<div class="section-header">📊 البيانات المستعرضة: {selected_sheet}</div>', unsafe_allow_html=True)
+    
+    # فلاتر تفاعلية للـ Columns الرقمية والنصية
+    numeric_cols = selected_df.select_dtypes(include=['number']).columns.tolist()
+    text_cols = selected_df.select_dtypes(include=['object', 'category']).columns.tolist()
 
-df_card_normal = pd.DataFrame({
-    'البنك': ['ايجي بنك', 'العربي الافريقي', 'التنمية الصناعية'],
-    'Total Count': [36375, 108278, 4076],
-    'Total Formal AR': [3017689935.90, 2345331028.98, 147465079.45]
-})
-
-df_auto = pd.DataFrame({
-    'البنك': ['بنك العربي الافريقي', 'بنك التنمية الصناعية', 'بنك التنمية الصادرات', 'بنك نكست', 'الاهلي الكويتي', 'EG Bank', 'CIB'],
-    'Total Count': [399, 242, 70, 52, 60, 47, 7],
-    'Total Formal AR': [378159243.14, 286656298.62, 132228120.50, 97596271.76, 72711290.00, 44886737.53, 24402500.00]
-})
-
-df_sec = pd.DataFrame({
-    'المحفظة / البنك': ['Sce 13 (بنك مصر)'],
-    'Total Count': [23459],
-    'Total Sum of AR': [683310830.35]
-})
-
-tot_count = df_card_normal['Total Count'].sum() + df_auto['Total Count'].sum() + df_sec['Total Count'].sum()
-tot_val = df_card_normal['Total Formal AR'].sum() + df_auto['Total Formal AR'].sum() + df_sec['Total Sum of AR'].sum()
-
-c1, c2, c3 = st.columns(3)
-with c1:
-    st.markdown(f'<div class="kpi-card"><div class="kpi-title">إجمالي عدد الملفات والعقود</div><div class="kpi-value">{tot_count:,} ملف</div></div>', unsafe_allow_html=True)
-with c2:
-    st.markdown(f'<div class="kpi-card"><div class="kpi-title">إجمالي المحفظة المالية</div><div class="kpi-value">{tot_val:,.2f} ج.م</div></div>', unsafe_allow_html=True)
-with c3:
-    st.markdown(f'<div class="kpi-card"><div class="kpi-title">عدد البنوك والمؤسسات المشاركة</div><div class="kpi-value">8 بنوك</div></div>', unsafe_allow_html=True)
-
-st.write("")
-
-tab1, tab2, tab3 = st.tabs(["💳 الكروت والطلب العادي", "🚗 عقود السيارات (Auto)", "🏦 التوريق (Securitization)"])
-
-with tab1:
-    col1, col2 = st.columns([1.2, 1])
+    # أ) بطاقات KPI ديناميكية
+    col1, col2, col3, col4 = st.columns(4)
     with col1:
-        fig1 = px.bar(df_card_normal, x='Total Formal AR', y='البنك', orientation='h', text_auto='.3s',
-                      title="القيمة المالية بحسب البنك (جنيه مصري)", color_discrete_sequence=['#00c4cc'])
-        fig1.update_layout(paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)', font_color='#ffffff')
-        st.plotly_chart(fig1, use_container_width=True)
+        st.markdown(f'''
+            <div class="kpi-card">
+                <div class="kpi-title">إجمالي عدد السجلات</div>
+                <div class="kpi-value">{len(selected_df):,}</div>
+                <div class="kpi-sub">صف في الشيت</div>
+            </div>
+        ''', unsafe_allow_html=True)
+        
     with col2:
-        st.dataframe(df_card_normal, use_container_width=True, hide_index=True)
+        val_sum = selected_df[numeric_cols[0]].sum() if numeric_cols else 0
+        col_label = numeric_cols[0] if numeric_cols else "لا يوجد"
+        st.markdown(f'''
+            <div class="kpi-card">
+                <div class="kpi-title">إجمالي ({col_label})</div>
+                <div class="kpi-value">{val_sum:,.2f}</div>
+                <div class="kpi-sub">مجموع القيمة المالية</div>
+            </div>
+        ''', unsafe_allow_html=True)
 
-with tab2:
-    col1, col2 = st.columns([1.2, 1])
-    with col1:
-        fig2 = px.bar(df_auto, x='Total Formal AR', y='البنك', orientation='h', text_auto='.3s',
-                      title="توزيع قيم عقود السيارات بالبنوك", color_discrete_sequence=['#26c6da'])
-        fig2.update_layout(paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)', font_color='#ffffff', yaxis={'categoryorder':'total ascending'})
-        st.plotly_chart(fig2, use_container_width=True)
-    with col2:
-        st.dataframe(df_auto, use_container_width=True, hide_index=True)
+    with col3:
+        val_avg = selected_df[numeric_cols[0]].mean() if numeric_cols else 0
+        st.markdown(f'''
+            <div class="kpi-card">
+                <div class="kpi-title">المتوسط الحسابي</div>
+                <div class="kpi-value">{val_avg:,.2f}</div>
+                <div class="kpi-sub">متوسط قيمة الصف</div>
+            </div>
+        ''', unsafe_allow_html=True)
 
-with tab3:
-    st.subheader("محفظة التوريق - بنك مصر")
-    st.dataframe(df_sec, use_container_width=True, hide_index=True)
+    with col4:
+        cols_count = len(selected_df.columns)
+        st.markdown(f'''
+            <div class="kpi-card">
+                <div class="kpi-title">عدد الأعمدة</div>
+                <div class="kpi-value">{cols_count}</div>
+                <div class="kpi-sub">أعمدة البيانات</div>
+            </div>
+        ''', unsafe_allow_html=True)
+
+    st.write("")
+
+    # ب) رسوم بيانية تفاعلية سهلة الحركة
+    if numeric_cols and text_cols:
+        st.markdown('<div class="section-header">📉 الرسوم البيانية التفاعلية</div>', unsafe_allow_html=True)
+        
+        c1, c2 = st.columns([1.5, 1])
+        with c1:
+            fig_bar = px.bar(
+                selected_df.head(20), 
+                x=text_cols[0], 
+                y=numeric_cols[0],
+                color=text_cols[0],
+                title=f"توزيع {numeric_cols[0]} حسب {text_cols[0]}",
+                template="plotly_dark"
+            )
+            fig_bar.update_layout(paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)', showlegend=False)
+            st.plotly_chart(fig_bar, use_container_width=True)
+
+        with c2:
+            fig_pie = px.pie(
+                selected_df.head(10), 
+                names=text_cols[0], 
+                values=numeric_cols[0],
+                title=f"نسب الإسهام للـ 10 عناصر الأوائل",
+                hole=0.4,
+                template="plotly_dark"
+            )
+            fig_pie.update_layout(paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)')
+            st.plotly_chart(fig_pie, use_container_width=True)
+
+    # ج) جدول البيانات التفاعلي المباشر
+    st.markdown('<div class="section-header">📋 جدول البيانات المفلتر (سريع الاستجابة)</div>', unsafe_allow_html=True)
+    st.dataframe(selected_df, use_container_width=True)
+
+else:
+    # ---------------------------------------------------------
+    # 5. العرض الافتراضي في حالة عدم رفع ملف بعد
+    # ---------------------------------------------------------
+    df_demo = pd.DataFrame({
+        'البنك': ['ايجي بنك', 'العربي الافريقي', 'التنمية الصناعية', 'بنك مصر (توريق)', 'الأهلي الكويتي'],
+        'عدد العقود': [36375, 108278, 4076, 23459, 60],
+        'إجمالي القيمة المالية (جنيه)': [3017689935.90, 2345331028.98, 147465079.45, 683310830.35, 72711290.00]
+    })
+
+    c1, c2, c3 = st.columns(3)
+    with c1:
+        st.markdown(f'<div class="kpi-card"><div class="kpi-title">إجمالي العقود</div><div class="kpi-value">{df_demo["عدد العقود"].sum():,}</div></div>', unsafe_allow_html=True)
+    with c2:
+        st.markdown(f'<div class="kpi-card"><div class="kpi-title">إجمالي قيمة المحفظة</div><div class="kpi-value">{df_demo["إجمالي القيمة المالية (جنيه)"].sum():,.2f} ج.م</div></div>', unsafe_allow_html=True)
+    with c3:
+        st.markdown(f'<div class="kpi-card"><div class="kpi-title">عدد المؤسسات المصنفة</div><div class="kpi-value">5 مؤسسات</div></div>', unsafe_allow_html=True)
+
+    st.write("")
+    
+    col_chart, col_tbl = st.columns([1.3, 1])
+    with col_chart:
+        fig = px.bar(df_demo, x='إجمالي القيمة المالية (جنيه)', y='البنك', orientation='h', 
+                     text_auto='.3s', color='إجمالي القيمة المالية (جنيه)', template="plotly_dark",
+                     title="توزيع قيم المحافظ بالبنوك 2026")
+        fig.update_layout(paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)')
+        st.plotly_chart(fig, use_container_width=True)
+        
+    with col_tbl:
+        st.dataframe(df_demo, use_container_width=True, hide_index=True)
