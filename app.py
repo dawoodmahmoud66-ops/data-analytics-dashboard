@@ -19,7 +19,7 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-st.title("📊 لوحة تحكم عمليات التخصيم والتوريق (Discount & Securitization 2026)")
+st.title("Analysis)")
 st.markdown("---")
 
 # 1. تجهيز البيانات من الشيتات الثلاثة
