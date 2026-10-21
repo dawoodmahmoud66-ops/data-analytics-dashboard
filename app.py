@@ -1,11 +1,9 @@
 import streamlit as st
 import pandas as pd
 import plotly.express as px
-import plotly.graph_objects as go
-import io
 
 # ---------------------------------------------------------
-# 1. إعدادات الصفحة الهيكلية والتصميم الأنيق (Theme Aman/Cyan)
+# 1. إعدادات الصفحة والهيدر الأنيق (Aman Theme)
 # ---------------------------------------------------------
 st.set_page_config(
     page_title="داشبورد تحليل محفظة التوريق والتخصيم 2026",
@@ -13,7 +11,6 @@ st.set_page_config(
     layout="wide"
 )
 
-# تطبيق ألوان وتنسيقات واجهة AMAN
 st.markdown("""
     <style>
     @import url('https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800;900&display=swap');
@@ -29,7 +26,6 @@ st.markdown("""
         text-align: right;
     }
     
-    /* الهيدر العلوي الأنيق */
     .custom-header {
         background: linear-gradient(105deg, #00B9C3, #008C96);
         border-radius: 16px;
@@ -49,13 +45,6 @@ st.markdown("""
         border-radius: 12px;
     }
     
-    /* بطاقات KPI العلوية */
-    .kpi-container {
-        display: grid;
-        grid-template-columns: repeat(4, 1fr);
-        gap: 12px;
-        margin-bottom: 20px;
-    }
     .kpi-card-custom {
         background: #ffffff;
         border-radius: 12px;
@@ -76,7 +65,6 @@ st.markdown("""
         margin-top: 4px;
     }
     
-    /* عناوين الأقسام */
     .section-title {
         font-size: 16px;
         font-weight: 800;
@@ -88,19 +76,9 @@ st.markdown("""
         border-right: 4px solid #00B9C3;
         box-shadow: 0 2px 6px rgba(0,0,0,0.03);
     }
-    
-    /* تنسيق الجداول */
-    .dataframe {
-        border-collapse: collapse !important;
-        width: 100% !important;
-        font-size: 13px !important;
-    }
     </style>
 """, unsafe_allow_html=True)
 
-# ---------------------------------------------------------
-# 2. الهيدر العلوي المميز
-# ---------------------------------------------------------
 st.markdown("""
     <div class="custom-header">
         <div class="logo">aman</div>
@@ -113,7 +91,7 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # ---------------------------------------------------------
-# 3. القائمة الجانبية لرفع الملف
+# 2. القائمة الجانبية لرفع الملف
 # ---------------------------------------------------------
 st.sidebar.header("📁 رفع بيانات الإكسيل")
 uploaded_file = st.sidebar.file_uploader(
@@ -122,19 +100,18 @@ uploaded_file = st.sidebar.file_uploader(
 )
 
 # ---------------------------------------------------------
-# 4. دالة معالجة واستخراج البيانات
+# 3. معالجة وتوليد البيانات
 # ---------------------------------------------------------
 if uploaded_file is not None:
     try:
         df = pd.read_excel(uploaded_file)
         st.sidebar.success(f"تم تحميل الملف بنجاح: {uploaded_file.name}")
         
-        # التعرف الآلي على الأعمدة
+        # البحث عن الأعمدة الأساسية
         status_col = None
         ar_col = None
         principal_col = None
         interest_col = None
-        credit_col = None
         
         for col in df.columns:
             c_str = str(col).lower()
@@ -146,10 +123,7 @@ if uploaded_file is not None:
                 principal_col = col
             elif "formal interest" in c_str or "interest" in c_str:
                 interest_col = col
-            elif "credit" in c_str or "مبلغ" in c_str:
-                credit_col = col
 
-        # تعيين الافتراضيات في حالة تغير الأسماء
         if not status_col:
             status_col = "الحاله" if "الحاله" in df.columns else df.columns[2]
         if not ar_col:
@@ -159,13 +133,13 @@ if uploaded_file is not None:
         if not interest_col:
             interest_col = "totalinterest_asoff" if "totalinterest_asoff" in df.columns else df.columns[9]
 
-        # أ) حساب أرقام الـ KPIs العلوية
+        # حساب كروت KPIs
         total_contracts = len(df)
         sum_ar = df[ar_col].sum() if ar_col in df.columns else 0
         sum_principal = df[principal_col].sum() if principal_col in df.columns else 0
         sum_interest = df[interest_col].sum() if interest_col in df.columns else 0
 
-        # عرض الكروت العلوية الأربعة
+        # عرض الكروت الأربعة العلوية
         c1, c2, c3, c4 = st.columns(4)
         with c1:
             st.markdown(f'<div class="kpi-card-custom"><div class="val">{total_contracts:,}</div><div class="lbl">إجمالي العقود</div></div>', unsafe_allow_html=True)
@@ -178,25 +152,23 @@ if uploaded_file is not None:
 
         st.write("")
 
-        # ب) تجميع البيانات وتفنيدها بحسب "الحاله"
+        # تجميع البيانات بشكل صريح لتجنب أخطاء أسماء الأعمدة
         df_grouped = df.groupby(status_col, as_index=False).agg({
-            status_col: 'count',
-            ar_col: 'sum',
+            ar_col: ['count', 'sum'],
             principal_col: 'sum',
             interest_col: 'sum'
-        }).rename(columns={
-            status_col: 'الحالة',
-            status_col: 'عدد العقود',
-            ar_col: 'Formal AR',
-            principal_col: 'Formal Principal',
-            interest_col: 'Formal Interest'
         })
+        
+        # إعادة تسمية الأعمدة بأسماء واضحة ومحددة
+        df_grouped.columns = ['الحالة', 'عدد العقود', 'Formal AR', 'Formal Principal', 'Formal Interest']
 
-        # ج) قسم الرسوم البيانية التفاعلية (Chart.js Style)
+        # قسم الرسوم البيانية التفاعلية
         st.markdown('<div class="section-title">📊 الرسوم البيانية التفاعلية للمحفظة</div>', unsafe_allow_html=True)
         
         col_g1, col_g2 = st.columns(2)
+        
         with col_g1:
+            # الرسم البياني الأفقـي
             fig_bar = px.bar(
                 df_grouped, 
                 x='عدد العقود', 
@@ -206,10 +178,16 @@ if uploaded_file is not None:
                 title="توزيع عدد العقود بحسب الحالة",
                 color_discrete_sequence=['#00B9C3']
             )
-            fig_bar.update_layout(paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)', font_color='#0A3D3A')
+            fig_bar.update_layout(
+                paper_bgcolor='rgba(0,0,0,0)', 
+                plot_bgcolor='rgba(0,0,0,0)', 
+                font_color='#0A3D3A',
+                yaxis={'categoryorder': 'total ascending'}
+            )
             st.plotly_chart(fig_bar, use_container_width=True)
 
         with col_g2:
+            # الرسم الدائري
             fig_pie = px.pie(
                 df_grouped, 
                 names='الحالة', 
@@ -218,13 +196,16 @@ if uploaded_file is not None:
                 color_discrete_sequence=px.colors.qualitative.Set3,
                 hole=0.4
             )
-            fig_pie.update_layout(paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)', font_color='#0A3D3A')
+            fig_pie.update_layout(
+                paper_bgcolor='rgba(0,0,0,0)', 
+                plot_bgcolor='rgba(0,0,0,0)', 
+                font_color='#0A3D3A'
+            )
             st.plotly_chart(fig_pie, use_container_width=True)
 
-        # د) الجدول التفصيلي للنتائج التجميعية (Aman Design Table)
+        # جدول البيانات المفصل
         st.markdown('<div class="section-title">📋 تفنيد المحفظة الشامل بحسب (الحالة)</div>', unsafe_allow_html=True)
         
-        # إضافة صف الإجمالي العام (Grand Total Row)
         df_display = df_grouped.copy()
         total_row = pd.DataFrame({
             'الحالة': ['الإجمالي العام (Grand Total)'],
@@ -235,21 +216,13 @@ if uploaded_file is not None:
         })
         df_display = pd.concat([df_display, total_row], ignore_index=True)
 
-        st.dataframe(
-            df_display.style.format({
-                'عدد العقود': '{:,}',
-                'Formal AR': '{:,.2f} ج.م',
-                'Formal Principal': '{:,.2f} ج.م',
-                'Formal Interest': '{:,.2f} ج.م'
-            }), 
-            use_container_width=True
-        )
+        st.dataframe(df_display, use_container_width=True)
 
     except Exception as e:
         st.error(f"حدث خطأ أثناء تحليل البيانات: {e}")
 
 else:
-    # --- العرض الافتراضي في حالة عدم رفع ملف ---
+    # العرض الافتراضي
     st.info("💡 قم برفع ملف الإكسيل لعرض تفنيد Formal AR و Principal و Interest بحسب الحالة تلقائياً.")
     
     df_demo = pd.DataFrame({
