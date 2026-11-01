@@ -117,7 +117,7 @@ if uploaded_file is not None:
         num_cols = df.select_dtypes(include=['number']).columns.tolist()
         text_cols = df.select_dtypes(include=['object', 'category']).columns.tolist()
 
-        # إضافة خيار تحديد الأعمدة لعرضها في المؤشرات (KPIs)
+        # تخصيص مؤشرات الأداء (KPIs)
         st.sidebar.header("📊 تخصيص مؤشرات الأداء (KPIs)")
         selected_kpi_cols = st.sidebar.multiselect(
             "اختر الأعمدة الماليّة للـ KPI:",
@@ -182,7 +182,17 @@ if uploaded_file is not None:
                             report_placeholder.markdown(f'<div class="ai-box">{full_response}▌</div>', unsafe_allow_html=True)
                 
                 report_placeholder.markdown(f'<div class="ai-box">{full_response}</div>', unsafe_allow_html=True)
+                st.session_state['latest_report'] = full_response
             
+            # زر تصدير التقرير المالي نصياً إذا تم إنشاؤه
+            if 'latest_report' in st.session_state:
+                st.download_button(
+                    label="📄 تحميل التقرير المالي كملف نصي (.txt)",
+                    data=st.session_state['latest_report'],
+                    file_name="AMAN_Financial_Report.txt",
+                    mime="text/plain"
+                )
+
             # ج) الشات التفاعلي مع الشيت
             st.markdown('<div class="section-title">💬 اسأل الذكاء الاصطناعي عن أي تفاصيل في الشيت (Chat with Excel)</div>', unsafe_allow_html=True)
             user_query = st.text_input("أدخل سؤالك المالي حول بيانات الملف (مثال: ما هو أكبر بنك؟ أو ما إجمالي المستحقات؟):")
@@ -230,8 +240,22 @@ if uploaded_file is not None:
             fig_pie.update_layout(paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)', font_color='#0A3D3A')
             st.plotly_chart(fig_pie, use_container_width=True)
 
-        st.markdown(f'<div class="section-title">📋 الجدول التجميعي المفلتر ({group_by_col})</div>', unsafe_allow_html=True)
+        # هـ) عرض وتصدير الجداول التجميعية كملف إكسيل
+        st.markdown(f'<div class="section-title">📋 الجدول التجميعي المفلتر ({group_by_col}) وتصديره</div>', unsafe_allow_html=True)
         st.dataframe(df_grouped, use_container_width=True)
+
+        # إنشاء ملف الإكسيل التجميعي في الذاكرة لتنزيله
+        buffer = io.BytesIO()
+        with pd.ExcelWriter(buffer, engine='openpyxl') as writer:
+            df_grouped.to_excel(writer, index=False, sheet_name='Summary_Data')
+        
+        st.download_button(
+            label="📊 تحميل الجدول المجمّع كملف إكسيل (.xlsx)",
+            data=buffer.getvalue(),
+            file_name=f"AMAN_Summary_{group_by_col}.xlsx",
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            use_container_width=True
+        )
 
     except Exception as e:
         st.error(f"حدث خطأ أثناء تحليل الشيت: {e}")
