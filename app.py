@@ -159,7 +159,7 @@ if uploaded_file is not None:
                     اكتب بأسلوب عربي احترافي ومباشر وبنقاط واضحة.
                     """
                     
-                    model = genai.GenerativeModel('gemini-1.5-flash-latest')
+                    model = genai.GenerativeModel("gemini-1.5-flash")
                     response = model.generate_content(prompt)
                     
                     st.markdown(f'<div class="ai-box">{response.text}</div>', unsafe_allow_html=True)
@@ -179,7 +179,7 @@ if uploaded_file is not None:
                     أجب بدقة وبشكل مختصر ومباشر باللغة العربية على السؤال التالي:
                     {user_query}
                     """
-                    model = genai.GenerativeModel('gemini-1.5-flash-latest')
+                    model = genai.GenerativeModel("gemini-1.5-flash")
                     chat_res = model.generate_content(chat_prompt)
                     st.info(f"💡 **الإجابة:** {chat_res.text}")
         else:
