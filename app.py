@@ -6,11 +6,10 @@ from google import genai
 import io
 import os
 
-# مكتبات تصدير المستندات والصور
+# مكتبات تصدير المستندات
 from docx import Document
-from docx.shared import Inches as DocxInches
 from pptx import Presentation
-from pptx.util import Inches as PptxInches
+from openpyxl.chart import BarChart, Reference
 
 # ---------------------------------------------------------
 # 1. إعدادات الصفحة والتصميم الفاخر المتقدم (Aman Theme)
@@ -123,7 +122,6 @@ if uploaded_file is not None:
         num_cols = df.select_dtypes(include=['number']).columns.tolist()
         text_cols = df.select_dtypes(include=['object', 'category']).columns.tolist()
 
-        # تخصيص مؤشرات الأداء (KPIs)
         st.sidebar.header("📊 تخصيص مؤشرات الأداء (KPIs)")
         selected_kpi_cols = st.sidebar.multiselect(
             "اختر الأعمدة الماليّة للـ KPI:",
@@ -131,7 +129,7 @@ if uploaded_file is not None:
             default=num_cols[:3] if num_cols else []
         )
 
-        # أ) المؤشرات المالية الكلية (KPIs Dashboard)
+        # أ) المؤشرات المالية الكلية
         st.markdown(f'<div class="section-title">📊 الملخص التنفيذي ومؤشرات الأداء الرئيسية ({selected_sheet})</div>', unsafe_allow_html=True)
         
         total_kpis = len(selected_kpi_cols) + 1
@@ -148,7 +146,7 @@ if uploaded_file is not None:
 
         st.write("")
 
-        # ب) محرك التقرير التلقائي بالذكاء الاصطناعي
+        # ب) التتقرير بالذكاء الاصطناعي
         st.markdown('<div class="section-title">🤖 التقرير المالي المباشر بالذكاء الاصطناعي (AI Executive Summary)</div>', unsafe_allow_html=True)
         
         if client:
@@ -190,7 +188,6 @@ if uploaded_file is not None:
                 report_placeholder.markdown(f'<div class="ai-box">{full_response}</div>', unsafe_allow_html=True)
                 st.session_state['latest_report'] = full_response
 
-            # ج) الشات التفاعلي مع الشيت
             st.markdown('<div class="section-title">💬 اسأل الذكاء الاصطناعي عن أي تفاصيل في الشيت (Chat with Excel)</div>', unsafe_allow_html=True)
             user_query = st.text_input("أدخل سؤالك المالي حول بيانات الملف (مثال: ما هو أكبر بنك؟ أو ما إجمالي المستحقات؟):")
             
@@ -237,7 +234,7 @@ if uploaded_file is not None:
             fig_pie.update_layout(paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)', font_color='#0A3D3A')
             st.plotly_chart(fig_pie, use_container_width=True)
 
-        # هـ) عرض وتصدير الجداول والتقرير متعدد الصيغ شاملاً الرسوم البيانية
+        # هـ) عرض وتصدير الجداول والتقرير متعدد الصيغ
         st.markdown(f'<div class="section-title">📋 تصدير التقرير والبيانات والرسوم البيانية</div>', unsafe_allow_html=True)
         st.dataframe(df_grouped, use_container_width=True)
 
@@ -250,29 +247,42 @@ if uploaded_file is not None:
 
         ai_report_text = st.session_state.get('latest_report', 'لم يتم توليد التقرير المالي بالذكاء الاصطناعي بعد.')
 
-        # تجهيز صورة الرسم البياني في الذاكرة
-        try:
-            img_bytes = fig_bar.to_image(format="png", width=800, height=500)
-        except Exception:
-            img_bytes = None
-
         if export_format == "Excel (.xlsx)":
             buffer = io.BytesIO()
             with pd.ExcelWriter(buffer, engine='openpyxl') as writer:
                 df.to_excel(writer, index=False, sheet_name='Raw_Data')
-                df_grouped.to_excel(writer, index=False, sheet_name='Summary_Data')
+                
+                # كتابة البيانات المجمعة
+                df_summary_top = df_grouped.head(15)
+                df_summary_top.to_excel(writer, index=False, sheet_name='Summary_Data')
+                
                 report_df = pd.DataFrame([{"AI_Financial_Report": ai_report_text}])
                 report_df.to_excel(writer, index=False, sheet_name='AI_Report')
 
-                if img_bytes:
-                    from openpyxl.drawing.image import Image as OpenpyxlImage
-                    ws = writer.book.create_sheet('Charts')
-                    img_stream = io.BytesIO(img_bytes)
-                    img = OpenpyxlImage(img_stream)
-                    ws.add_image(img, 'B2')
+                # بناء الرسم البياني الأصلي بداخل شيت الإكسيل تلقائياً
+                wb = writer.book
+                ws = writer.sheets['Summary_Data']
+                
+                chart = BarChart()
+                chart.type = "col"
+                chart.style = 10
+                chart.title = f"توزيع مجموع ({val_col}) بحسب ({group_by_col})"
+                chart.y_axis.title = str(val_col)
+                chart.x_axis.title = str(group_by_col)
+
+                data_ref = Reference(ws, min_col=2, min_row=1, max_row=len(df_summary_top) + 1)
+                cats_ref = Reference(ws, min_col=1, min_row=2, max_row=len(df_summary_top) + 1)
+                
+                chart.add_data(data_ref, titles_from_data=True)
+                chart.set_categories(cats_ref)
+                chart.width = 16
+                chart.height = 10
+                
+                # إدراج الرسم البياني في الخلية D2 بجانب الجدول
+                ws.add_chart(chart, "D2")
             
             st.download_button(
-                label="📊 تحميل ملف Excel الشامل بالرسوم البيانية (.xlsx)",
+                label="📊 تحميل ملف Excel الشامل بالرسم البياني الأصلي (.xlsx)",
                 data=buffer.getvalue(),
                 file_name=f"AMAN_Full_Report_{group_by_col}.xlsx",
                 mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
@@ -286,12 +296,7 @@ if uploaded_file is not None:
             doc.add_heading('1. التقرير المالي للذكاء الاصطناعي (AI Summary)', level=1)
             doc.add_paragraph(ai_report_text)
             
-            if img_bytes:
-                doc.add_heading('2. الرسم البياني التفاعلي', level=1)
-                img_stream = io.BytesIO(img_bytes)
-                doc.add_picture(img_stream, width=DocxInches(5.5))
-
-            doc.add_heading(f'3. جدول البيانات التجميعي ({group_by_col})', level=1)
+            doc.add_heading(f'2. جدول البيانات التجميعي ({group_by_col})', level=1)
             table = doc.add_table(rows=1, cols=len(df_grouped.columns))
             hdr_cells = table.rows[0].cells
             for col_idx, col_name in enumerate(df_grouped.columns):
@@ -307,7 +312,7 @@ if uploaded_file is not None:
             doc_buffer.seek(0)
 
             st.download_button(
-                label="📄 تحميل مستند Word الشامل بالرسوم البيانية (.docx)",
+                label="📄 تحميل مستند Word الشامل (.docx)",
                 data=doc_buffer.getvalue(),
                 file_name=f"AMAN_Financial_Report_{group_by_col}.docx",
                 mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
@@ -317,31 +322,22 @@ if uploaded_file is not None:
         elif export_format == "PowerPoint (.pptx)":
             prs = Presentation()
             
-            # الشريحة الأولى: العنوان
             slide_layout = prs.slide_layouts[0]
             slide = prs.slides.add_slide(slide_layout)
             slide.shapes.title.text = "منصة AMAN للتحليل المالي"
             slide.placeholders[1].text = f"تقرير مالي شامل لورقة: {selected_sheet}"
 
-            # الشريحة الثانية: تقرير الذكاء الاصطناعي
             slide_layout2 = prs.slide_layouts[1]
             slide2 = prs.slides.add_slide(slide_layout2)
             slide2.shapes.title.text = "الملخص التنفيذي بالذكاء الاصطناعي"
             slide2.placeholders[1].text = ai_report_text[:1000] + ("..." if len(ai_report_text) > 1000 else "")
-
-            # الشريحة الثالثة: الرسم البياني
-            if img_bytes:
-                slide_layout3 = prs.slide_layouts[6]
-                slide3 = prs.slides.add_slide(slide_layout3)
-                img_stream = io.BytesIO(img_bytes)
-                slide3.shapes.add_picture(img_stream, PptxInches(1), PptxInches(1), width=PptxInches(8))
 
             pptx_buffer = io.BytesIO()
             prs.save(pptx_buffer)
             pptx_buffer.seek(0)
 
             st.download_button(
-                label="مستند PowerPoint الشامل بالرسوم البيانية (.pptx)",
+                label="مستند PowerPoint الشامل (.pptx)",
                 data=pptx_buffer.getvalue(),
                 file_name=f"AMAN_Presentation_{group_by_col}.pptx",
                 mime="application/vnd.openxmlformats-officedocument.presentationml.presentation",
