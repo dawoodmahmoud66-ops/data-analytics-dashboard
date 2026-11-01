@@ -2,7 +2,7 @@ import streamlit as st
 import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
-import google.generativeai as genai
+from google import genai
 import io
 import os
 
@@ -82,12 +82,16 @@ st.markdown("""
 # ---------------------------------------------------------
 st.sidebar.header("🔑 إعدادات الذكاء الاصطناعي (Gemini)")
 
-# جلب المفتاح تلقائياً من Secrets أولاً
+# جلب المفتاح تلقائياً من Secrets
 secret_key = st.secrets.get("GEMINI_API_KEY", "")
 api_key = st.sidebar.text_input("Gemini API Key:", value=secret_key, type="password", help="يتم القراءة تلقائيًا من Streamlit Secrets إذا تم ضبطها")
 
+client = None
 if api_key:
-    genai.configure(api_key=api_key)
+    try:
+        client = genai.Client(api_key=api_key)
+    except Exception as e:
+        st.sidebar.error(f"خطأ في تهيئة المفتاح: {e}")
 
 st.sidebar.header("📁 إدارة الملفات والبيانات")
 uploaded_file = st.sidebar.file_uploader("رفع ملف إكسيل (.xlsx, .xls)", type=["xlsx", "xls"])
@@ -133,7 +137,7 @@ if uploaded_file is not None:
         # ب) محرك التقرير التلقائي بالذكاء الاصطناعي (AI Analysis Engine)
         st.markdown('<div class="section-title">🤖 التقرير المالي المباشر بالذكاء الاصطناعي (AI Executive Summary)</div>', unsafe_allow_html=True)
         
-        if api_key:
+        if client:
             col_btn1, col_btn2 = st.columns([1, 4])
             with col_btn1:
                 gen_btn = st.button("✨ توليد التقرير المالي", use_container_width=True)
@@ -159,8 +163,10 @@ if uploaded_file is not None:
                     اكتب بأسلوب عربي احترافي ومباشر وبنقاط واضحة.
                     """
                     
-                    model = genai.GenerativeModel("gemini-1.5-flash")
-                    response = model.generate_content(prompt)
+                    response = client.models.generate_content(
+                        model="gemini-2.5-flash",
+                        contents=prompt
+                    )
                     
                     st.markdown(f'<div class="ai-box">{response.text}</div>', unsafe_allow_html=True)
             
@@ -179,8 +185,10 @@ if uploaded_file is not None:
                     أجب بدقة وبشكل مختصر ومباشر باللغة العربية على السؤال التالي:
                     {user_query}
                     """
-                    model = genai.GenerativeModel("gemini-1.5-flash")
-                    chat_res = model.generate_content(chat_prompt)
+                    chat_res = client.models.generate_content(
+                        model="gemini-2.5-flash",
+                        contents=chat_prompt
+                    )
                     st.info(f"💡 **الإجابة:** {chat_res.text}")
         else:
             st.warning("🔑 يرجى وضع مفتاح Gemini API Key في الشريط الجانبي لتفعيل محرك التقرير التلقائي والشات الذكي.")
