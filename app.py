@@ -164,7 +164,7 @@ if uploaded_file is not None:
                     """
                     
                     response = client.models.generate_content(
-                        model="gemini-2.5-flash",
+                        model="gemini-3.8-flash",
                         contents=prompt
                     )
                     
@@ -186,7 +186,7 @@ if uploaded_file is not None:
                     {user_query}
                     """
                     chat_res = client.models.generate_content(
-                        model="gemini-2.5-flash",
+                        model="gemini-3.8-flash",
                         contents=chat_prompt
                     )
                     st.info(f"💡 **الإجابة:** {chat_res.text}")
