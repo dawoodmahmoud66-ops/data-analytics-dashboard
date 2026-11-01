@@ -3,8 +3,10 @@ import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
 from google import genai
+from google.genai.errors import APIError
 import io
 import os
+import time
 
 # مكتبات تصدير المستندات
 from docx import Document
@@ -146,7 +148,7 @@ if uploaded_file is not None:
 
         st.write("")
 
-        # ب) التتقرير بالذكاء الاصطناعي
+        # ب) التقرير بالذكاء الاصطناعي مع معالجة ضغط السيرفر تلقائياً
         st.markdown('<div class="section-title">🤖 التقرير المالي المباشر بالذكاء الاصطناعي (AI Executive Summary)</div>', unsafe_allow_html=True)
         
         if client:
@@ -174,20 +176,35 @@ if uploaded_file is not None:
                 report_placeholder = st.empty()
                 full_response = ""
                 
-                with st.spinner("جاري الكتابة المباشرة للتقرير..."):
-                    response_stream = client.models.generate_content_stream(
-                        model="gemini-3.8-flash",
-                        contents=prompt
-                    )
+                with st.spinner("جاري الاتصال بالذكاء الاصطناعي وكتابة التقرير..."):
+                    success = False
+                    for attempt in range(3):
+                        try:
+                            response_stream = client.models.generate_content_stream(
+                                model="gemini-3.8-flash",
+                                contents=prompt
+                            )
+                            
+                            for chunk in response_stream:
+                                if chunk.text:
+                                    full_response += chunk.text
+                                    report_placeholder.markdown(f'<div class="ai-box">{full_response}▌</div>', unsafe_allow_html=True)
+                            
+                            report_placeholder.markdown(f'<div class="ai-box">{full_response}</div>', unsafe_allow_html=True)
+                            st.session_state['latest_report'] = full_response
+                            success = True
+                            break
+                        except Exception as err:
+                            if "503" in str(err) or "UNAVAILABLE" in str(err):
+                                time.sleep(2)  # انتظار ثانيتين وإعادة المحاولة تلقائياً
+                            else:
+                                st.error(f"حدث خطأ في الاتصال: {err}")
+                                break
                     
-                    for chunk in response_stream:
-                        if chunk.text:
-                            full_response += chunk.text
-                            report_placeholder.markdown(f'<div class="ai-box">{full_response}▌</div>', unsafe_allow_html=True)
-                
-                report_placeholder.markdown(f'<div class="ai-box">{full_response}</div>', unsafe_allow_html=True)
-                st.session_state['latest_report'] = full_response
+                    if not success and not full_response:
+                        st.warning("⚠️ يواجه سيرفر Gemini ضغطاً مؤقتاً في هذه اللحظة. يرجى الضغط على زر 'توليد التقرير المالي' مرة أخرى بعد بضع ثوانٍ.")
 
+            # ج) الشات التفاعلي
             st.markdown('<div class="section-title">💬 اسأل الذكاء الاصطناعي عن أي تفاصيل في الشيت (Chat with Excel)</div>', unsafe_allow_html=True)
             user_query = st.text_input("أدخل سؤالك المالي حول بيانات الملف (مثال: ما هو أكبر بنك؟ أو ما إجمالي المستحقات؟):")
             
@@ -195,23 +212,27 @@ if uploaded_file is not None:
                 chat_placeholder = st.empty()
                 full_chat = ""
                 with st.spinner("جاري استخراج الإجابة..."):
-                    chat_prompt = f"""
-                    بناءً على أول 10 صفوف والإحصائيات التالية للملف:
-                    {df.head(10).to_string()}
-                    الإحصائيات:
-                    {df.describe().round(2).to_string()}
-                    
-                    أجب بدقة وبإيجاز شديد على هذا السؤال باللغة العربية: {user_query}
-                    """
-                    chat_stream = client.models.generate_content_stream(
-                        model="gemini-3.8-flash",
-                        contents=chat_prompt
-                    )
-                    for chunk in chat_stream:
-                        if chunk.text:
-                            full_chat += chunk.text
-                            chat_placeholder.info(f"💡 **الإجابة:** {full_chat}▌")
-                chat_placeholder.info(f"💡 **الإجابة:** {full_chat}")
+                    try:
+                        chat_prompt = f"""
+                        بناءً على أول 10 صفوف والإحصائيات التالية للملف:
+                        {df.head(10).to_string()}
+                        الإحصائيات:
+                        {df.describe().round(2).to_string()}
+                        
+                        أجب بدقة وبإيجاز شديد على هذا السؤال باللغة العربية: {user_query}
+                        """
+                        chat_stream = client.models.generate_content_stream(
+                            model="gemini-3.8-flash",
+                            contents=chat_prompt
+                        )
+                        for chunk in chat_stream:
+                            if chunk.text:
+                                full_chat += chunk.text
+                                chat_placeholder.info(f"💡 **الإجابة:** {full_chat}▌")
+                        chat_placeholder.info(f"💡 **الإجابة:** {full_chat}")
+                    except Exception as chat_err:
+                        st.warning("⚠️ السيرفر مشغول حالياً، يرجى إعادة كتابة السؤال بعد ثوانٍ.")
+
         else:
             st.warning("🔑 يرجى وضع مفتاح Gemini API Key في الشريط الجانبي لتفعيل محرك التقرير التلقائي والشات الذكي.")
 
@@ -252,14 +273,12 @@ if uploaded_file is not None:
             with pd.ExcelWriter(buffer, engine='openpyxl') as writer:
                 df.to_excel(writer, index=False, sheet_name='Raw_Data')
                 
-                # كتابة البيانات المجمعة
                 df_summary_top = df_grouped.head(15)
                 df_summary_top.to_excel(writer, index=False, sheet_name='Summary_Data')
                 
                 report_df = pd.DataFrame([{"AI_Financial_Report": ai_report_text}])
                 report_df.to_excel(writer, index=False, sheet_name='AI_Report')
 
-                # بناء الرسم البياني الأصلي بداخل شيت الإكسيل تلقائياً
                 wb = writer.book
                 ws = writer.sheets['Summary_Data']
                 
@@ -278,7 +297,6 @@ if uploaded_file is not None:
                 chart.width = 16
                 chart.height = 10
                 
-                # إدراج الرسم البياني في الخلية D2 بجانب الجدول
                 ws.add_chart(chart, "D2")
             
             st.download_button(
