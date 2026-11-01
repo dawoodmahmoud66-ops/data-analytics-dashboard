@@ -159,7 +159,7 @@ if uploaded_file is not None:
                     اكتب بأسلوب عربي احترافي ومباشر وبنقاط واضحة.
                     """
                     
-                    model = genai.GenerativeModel('gemini-1.5-flash')
+                   model = genai.GenerativeModel('gemini-2.5-flash')
                     response = model.generate_content(prompt)
                     
                     st.markdown(f'<div class="ai-box">{response.text}</div>', unsafe_allow_html=True)
