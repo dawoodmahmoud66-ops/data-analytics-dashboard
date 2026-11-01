@@ -78,11 +78,11 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # ---------------------------------------------------------
-# 3. الشريط الجانبي - الربط التلقائي بمفتاح الأسرار
+# 3. الشريط الجانبي - الإعدادات والمفتاح
 # ---------------------------------------------------------
 st.sidebar.header("🔑 إعدادات الذكاء الاصطناعي (Gemini)")
 
-# جلب المفتاح تلقائياً من Secrets أولاً، وإذا لم يوجد يُطلب إدخاله يدويًا
+# جلب المفتاح تلقائياً من Secrets أولاً
 secret_key = st.secrets.get("GEMINI_API_KEY", "")
 api_key = st.sidebar.text_input("Gemini API Key:", value=secret_key, type="password", help="يتم القراءة تلقائيًا من Streamlit Secrets إذا تم ضبطها")
 
@@ -159,7 +159,7 @@ if uploaded_file is not None:
                     اكتب بأسلوب عربي احترافي ومباشر وبنقاط واضحة.
                     """
                     
-                   model = genai.GenerativeModel('gemini-2.5-flash')
+                    model = genai.GenerativeModel('gemini-1.5-flash-latest')
                     response = model.generate_content(prompt)
                     
                     st.markdown(f'<div class="ai-box">{response.text}</div>', unsafe_allow_html=True)
@@ -179,11 +179,11 @@ if uploaded_file is not None:
                     أجب بدقة وبشكل مختصر ومباشر باللغة العربية على السؤال التالي:
                     {user_query}
                     """
-                    model = genai.GenerativeModel('gemini-1.5-flash')
+                    model = genai.GenerativeModel('gemini-1.5-flash-latest')
                     chat_res = model.generate_content(chat_prompt)
                     st.info(f"💡 **الإجابة:** {chat_res.text}")
         else:
-            st.warning("🔑 يرجى ضبط GEMINI_API_KEY في Streamlit Secrets أو كتابة المفتاح في الشريط الجانبي.")
+            st.warning("🔑 يرجى وضع مفتاح Gemini API Key في الشريط الجانبي لتفعيل محرك التقرير التلقائي والشات الذكي.")
 
         # د) أدوات التحكم والتجميع الفوري والرسوم البيانية المتقدمة
         st.markdown('<div class="section-title">⚙️ التجميع الفوري والرسوم البيانية التفاعلية</div>', unsafe_allow_html=True)
