@@ -4,6 +4,7 @@ import plotly.express as px
 import plotly.graph_objects as go
 import google.generativeai as genai
 import io
+import os
 
 # ---------------------------------------------------------
 # 1. إعدادات الصفحة والتصميم الفاخر المتقدم (Aman Theme)
@@ -77,13 +78,13 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # ---------------------------------------------------------
-# 3. الشريط الجانبي - الإعدادات والمفتاح
+# 3. الشريط الجانبي - الربط التلقائي بمفتاح الأسرار
 # ---------------------------------------------------------
 st.sidebar.header("🔑 إعدادات الذكاء الاصطناعي (Gemini)")
 
-DEFAULT_API_KEY = "AQ.Ab8RN6L_9ONwW0-Tj4WyPEovCjGmqyOkOlIXLzLRNZFLQAJ6EQ"
-
-api_key = st.sidebar.text_input("Gemini API Key:", value=DEFAULT_API_KEY, type="password", help="أدخل مفتاح Gemini لتفعيل الشات والتقارير التلقائية")
+# جلب المفتاح تلقائياً من Secrets أولاً، وإذا لم يوجد يُطلب إدخاله يدويًا
+secret_key = st.secrets.get("GEMINI_API_KEY", "")
+api_key = st.sidebar.text_input("Gemini API Key:", value=secret_key, type="password", help="يتم القراءة تلقائيًا من Streamlit Secrets إذا تم ضبطها")
 
 if api_key:
     genai.configure(api_key=api_key)
@@ -182,7 +183,7 @@ if uploaded_file is not None:
                     chat_res = model.generate_content(chat_prompt)
                     st.info(f"💡 **الإجابة:** {chat_res.text}")
         else:
-            st.warning("🔑 يرجى وضع مفتاح Gemini API Key في الشريط الجانبي لتفعيل محرك التقرير التلقائي والشات الذكي.")
+            st.warning("🔑 يرجى ضبط GEMINI_API_KEY في Streamlit Secrets أو كتابة المفتاح في الشريط الجانبي.")
 
         # د) أدوات التحكم والتجميع الفوري والرسوم البيانية المتقدمة
         st.markdown('<div class="section-title">⚙️ التجميع الفوري والرسوم البيانية التفاعلية</div>', unsafe_allow_html=True)
