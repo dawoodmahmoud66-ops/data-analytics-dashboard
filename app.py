@@ -6,6 +6,11 @@ from google import genai
 import io
 import os
 
+# مكتبات تصدير المستندات
+from docx import Document
+from pptx import Presentation
+from pptx.util import Inches, Pt
+
 # ---------------------------------------------------------
 # 1. إعدادات الصفحة والتصميم الفاخر المتقدم (Aman Theme)
 # ---------------------------------------------------------
@@ -183,15 +188,6 @@ if uploaded_file is not None:
                 
                 report_placeholder.markdown(f'<div class="ai-box">{full_response}</div>', unsafe_allow_html=True)
                 st.session_state['latest_report'] = full_response
-            
-            # زر تصدير التقرير المالي نصياً إذا تم إنشاؤه
-            if 'latest_report' in st.session_state:
-                st.download_button(
-                    label="📄 تحميل التقرير المالي كملف نصي (.txt)",
-                    data=st.session_state['latest_report'],
-                    file_name="AMAN_Financial_Report.txt",
-                    mime="text/plain"
-                )
 
             # ج) الشات التفاعلي مع الشيت
             st.markdown('<div class="section-title">💬 اسأل الذكاء الاصطناعي عن أي تفاصيل في الشيت (Chat with Excel)</div>', unsafe_allow_html=True)
@@ -240,22 +236,91 @@ if uploaded_file is not None:
             fig_pie.update_layout(paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)', font_color='#0A3D3A')
             st.plotly_chart(fig_pie, use_container_width=True)
 
-        # هـ) عرض وتصدير الجداول التجميعية كملف إكسيل
-        st.markdown(f'<div class="section-title">📋 الجدول التجميعي المفلتر ({group_by_col}) وتصديره</div>', unsafe_allow_html=True)
+        # هـ) عرض وتصدير الجداول والتقرير متعدد الصيغ
+        st.markdown(f'<div class="section-title">📋 تصدير التقرير والبيانات بالتنسيق المطلوب</div>', unsafe_allow_html=True)
         st.dataframe(df_grouped, use_container_width=True)
 
-        # إنشاء ملف الإكسيل التجميعي في الذاكرة لتنزيله
-        buffer = io.BytesIO()
-        with pd.ExcelWriter(buffer, engine='openpyxl') as writer:
-            df_grouped.to_excel(writer, index=False, sheet_name='Summary_Data')
-        
-        st.download_button(
-            label="📊 تحميل الجدول المجمّع كملف إكسيل (.xlsx)",
-            data=buffer.getvalue(),
-            file_name=f"AMAN_Summary_{group_by_col}.xlsx",
-            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-            use_container_width=True
+        st.markdown("### 📥 اختيار صيغة الملف لتصدير التقرير والبيانات:")
+        export_format = st.radio(
+            "اختر صيغة الملف المراد تنزيله:",
+            options=["Excel (.xlsx)", "Word (.docx)", "PowerPoint (.pptx)"],
+            horizontal=True
         )
+
+        ai_report_text = st.session_state.get('latest_report', 'لم يتم توليد التقرير المالي بالذكاء الاصطناعي بعد.')
+
+        if export_format == "Excel (.xlsx)":
+            buffer = io.BytesIO()
+            with pd.ExcelWriter(buffer, engine='openpyxl') as writer:
+                df.to_excel(writer, index=False, sheet_name='Raw_Data')
+                df_grouped.to_excel(writer, index=False, sheet_name='Summary_Data')
+                report_df = pd.DataFrame([{"AI_Financial_Report": ai_report_text}])
+                report_df.to_excel(writer, index=False, sheet_name='AI_Report')
+            
+            st.download_button(
+                label="📊 تحميل ملف Excel الشامل (.xlsx)",
+                data=buffer.getvalue(),
+                file_name=f"AMAN_Full_Report_{group_by_col}.xlsx",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                use_container_width=True
+            )
+
+        elif export_format == "Word (.docx)":
+            doc = Document()
+            doc.add_heading('تقرير أمان للتحليل المالي الشامل', 0)
+            
+            doc.add_heading('1. التقرير المالي للذكاء الاصطناعي (AI Summary)', level=1)
+            doc.add_paragraph(ai_report_text)
+            
+            doc.add_heading(f'2. جدول البيانات التجميعي ({group_by_col})', level=1)
+            table = doc.add_table(rows=1, cols=len(df_grouped.columns))
+            hdr_cells = table.rows[0].cells
+            for col_idx, col_name in enumerate(df_grouped.columns):
+                hdr_cells[col_idx].text = str(col_name)
+            
+            for _, row in df_grouped.head(30).iterrows():
+                row_cells = table.add_row().cells
+                for col_idx, value in enumerate(row):
+                    row_cells[col_idx].text = str(value)
+
+            doc_buffer = io.BytesIO()
+            doc.save(doc_buffer)
+            doc_buffer.seek(0)
+
+            st.download_button(
+                label="📄 تحميل مستند Word الشامل (.docx)",
+                data=doc_buffer.getvalue(),
+                file_name=f"AMAN_Financial_Report_{group_by_col}.docx",
+                mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                use_container_width=True
+            )
+
+        elif export_format == "PowerPoint (.pptx)":
+            prs = Presentation()
+            
+            # الشريحة الأولى: العنوان
+            slide_layout = prs.slide_layouts[0]
+            slide = prs.slides.add_slide(slide_layout)
+            slide.shapes.title.text = "منصة AMAN للتحليل المالي"
+            slide.placeholders[1].text = f"تقرير مالي شامل لورقة: {selected_sheet}"
+
+            # الشريحة الثانية: تقرير الذكاء الاصطناعي
+            slide_layout2 = prs.slide_layouts[1]
+            slide2 = prs.slides.add_slide(slide_layout2)
+            slide2.shapes.title.text = "الملخص التنفيذي بالذكاء الاصطناعي"
+            slide2.placeholders[1].text = ai_report_text[:1000] + ("..." if len(ai_report_text) > 1000 else "")
+
+            pptx_buffer = io.BytesIO()
+            prs.save(pptx_buffer)
+            pptx_buffer.seek(0)
+
+            st.download_button(
+                label="مستند PowerPoint التقديمي (.pptx)",
+                data=pptx_buffer.getvalue(),
+                file_name=f"AMAN_Presentation_{group_by_col}.pptx",
+                mime="application/vnd.openxmlformats-officedocument.presentationml.presentation",
+                use_container_width=True
+            )
 
     except Exception as e:
         st.error(f"حدث خطأ أثناء تحليل الشيت: {e}")
