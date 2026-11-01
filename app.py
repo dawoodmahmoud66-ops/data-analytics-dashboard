@@ -82,7 +82,6 @@ st.markdown("""
 # ---------------------------------------------------------
 st.sidebar.header("🔑 إعدادات الذكاء الاصطناعي (Gemini)")
 
-# جلب المفتاح تلقائياً من Secrets
 secret_key = st.secrets.get("GEMINI_API_KEY", "")
 api_key = st.sidebar.text_input("Gemini API Key:", value=secret_key, type="password", help="يتم القراءة تلقائيًا من Streamlit Secrets إذا تم ضبطها")
 
@@ -106,7 +105,6 @@ if uploaded_file is not None:
         
         df_raw = pd.read_excel(xls, sheet_name=selected_sheet)
         
-        # اكتشاف ذكي لصف بداية البيانات
         header_row = 0
         for idx in range(min(15, len(df_raw))):
             row_str = " ".join(df_raw.iloc[idx].dropna().astype(str).values)
@@ -119,22 +117,32 @@ if uploaded_file is not None:
         num_cols = df.select_dtypes(include=['number']).columns.tolist()
         text_cols = df.select_dtypes(include=['object', 'category']).columns.tolist()
 
+        # إضافة خيار تحديد الأعمدة لعرضها في المؤشرات (KPIs)
+        st.sidebar.header("📊 تخصيص مؤشرات الأداء (KPIs)")
+        selected_kpi_cols = st.sidebar.multiselect(
+            "اختر الأعمدة الماليّة للـ KPI:",
+            options=num_cols,
+            default=num_cols[:3] if num_cols else []
+        )
+
         # أ) المؤشرات المالية الكلية (KPIs Dashboard)
         st.markdown(f'<div class="section-title">📊 الملخص التنفيذي ومؤشرات الأداء الرئيسية ({selected_sheet})</div>', unsafe_allow_html=True)
         
-        kpi_cols = st.columns(min(4, max(1, len(num_cols) + 1)))
+        total_kpis = len(selected_kpi_cols) + 1
+        kpi_cols = st.columns(min(4, max(1, total_kpis)))
         
         with kpi_cols[0]:
             st.markdown(f'<div class="kpi-card-custom"><div class="val">{len(df):,}</div><div class="lbl">إجمالي عدد السجلات/العقود</div></div>', unsafe_allow_html=True)
 
-        for i, col_name in enumerate(num_cols[:3]):
+        for i, col_name in enumerate(selected_kpi_cols):
             col_sum = df[col_name].sum()
-            with kpi_cols[i + 1]:
+            col_idx = (i + 1) % len(kpi_cols)
+            with kpi_cols[col_idx]:
                 st.markdown(f'<div class="kpi-card-custom" style="border-top-color:#10B981"><div class="val">{col_sum:,.2f}</div><div class="lbl">مجموع ({col_name})</div></div>', unsafe_allow_html=True)
 
         st.write("")
 
-        # ب) محرك التقرير التلقائي بالذكاء الاصطناعي (AI Analysis Engine)
+        # ب) محرك التقرير التلقائي بالذكاء الاصطناعي
         st.markdown('<div class="section-title">🤖 التقرير المالي المباشر بالذكاء الاصطناعي (AI Executive Summary)</div>', unsafe_allow_html=True)
         
         if client:
@@ -143,57 +151,67 @@ if uploaded_file is not None:
                 gen_btn = st.button("✨ توليد التقرير المالي", use_container_width=True)
             
             if gen_btn:
-                with st.spinner("جاري تحليل الهيكل المالي ومؤشرات المحفظة بـ Gemini AI..."):
-                    summary_stats = df.describe().to_string()
-                    data_sample = df.head(10).to_string()
-                    
-                    prompt = f"""
-                    أنت خبير ومحلل ماليات وتوريق أول في شركة أمان. قمت بقراءة وتدقيق ملف إكسيل ماليات بالبيانات التالية:
-                    
-                    عينة البيانات الأولى:
-                    {data_sample}
-                    
-                    المؤشرات الإحصائية المجمعة:
-                    {summary_stats}
-                    
-                    المطلوب تقديم تقرير تنفيذي متكامل يشمل:
-                    1. ملخص تنفيذي رفيع المستوى لأهم الأرقام والنتائج.
-                    2. تحليل أين تتركز المبالغ والمخاطر أو الترسبات المالية.
-                    3. أبرز 3 قرارات مالية وتوصيات سريعة للقيادة التنفيذية.
-                    اكتب بأسلوب عربي احترافي ومباشر وبنقاط واضحة.
-                    """
-                    
-                    response = client.models.generate_content(
+                summary_stats = df.describe().round(2).to_dict()
+                total_rows = len(df)
+                cols_names = list(df.columns)
+                
+                prompt = f"""
+                أنت خبير ومحلل ماليات وتوريق في شركة أمان. ألقِ نظرة على الملخص التالي لشيت الإكسيل:
+                - إجمالي السجلات: {total_rows}
+                - الأعمدة المتاحة: {cols_names}
+                - أهم المؤشرات الإحصائية للأرقام: {summary_stats}
+                
+                قدّم تقريراً تنفيذاً مالياً سريعاً ومختصراً جداً بأسلوب نقاط واضحة:
+                1. ملخص تنفيذي سريعة لأهم الأرقام.
+                2. تركز المبالغ والمخاطر.
+                3. توصيتين ماليتين فوريتين للقيادة.
+                """
+                
+                report_placeholder = st.empty()
+                full_response = ""
+                
+                with st.spinner("جاري الكتابة المباشرة للتقرير..."):
+                    response_stream = client.models.generate_content_stream(
                         model="gemini-3.8-flash",
                         contents=prompt
                     )
                     
-                    st.markdown(f'<div class="ai-box">{response.text}</div>', unsafe_allow_html=True)
+                    for chunk in response_stream:
+                        if chunk.text:
+                            full_response += chunk.text
+                            report_placeholder.markdown(f'<div class="ai-box">{full_response}▌</div>', unsafe_allow_html=True)
+                
+                report_placeholder.markdown(f'<div class="ai-box">{full_response}</div>', unsafe_allow_html=True)
             
-            # ج) ميزة الشات التفاعلي مع ملف الإكسيل (Ask AI about Excel)
+            # ج) الشات التفاعلي مع الشيت
             st.markdown('<div class="section-title">💬 اسأل الذكاء الاصطناعي عن أي تفاصيل في الشيت (Chat with Excel)</div>', unsafe_allow_html=True)
             user_query = st.text_input("أدخل سؤالك المالي حول بيانات الملف (مثال: ما هو أكبر بنك؟ أو ما إجمالي المستحقات؟):")
             
             if user_query:
-                with st.spinner("جاري استخراج الإجابة من البيانات..."):
+                chat_placeholder = st.empty()
+                full_chat = ""
+                with st.spinner("جاري استخراج الإجابة..."):
                     chat_prompt = f"""
-                    بناءً على ملف البيانات المرفق أدناه:
-                    {df.head(20).to_string()}
+                    بناءً على أول 10 صفوف والإحصائيات التالية للملف:
+                    {df.head(10).to_string()}
                     الإحصائيات:
-                    {df.describe().to_string()}
+                    {df.describe().round(2).to_string()}
                     
-                    أجب بدقة وبشكل مختصر ومباشر باللغة العربية على السؤال التالي:
-                    {user_query}
+                    أجب بدقة وبإيجاز شديد على هذا السؤال باللغة العربية: {user_query}
                     """
-                    chat_res = client.models.generate_content(
+                    chat_stream = client.models.generate_content_stream(
                         model="gemini-3.8-flash",
                         contents=chat_prompt
                     )
-                    st.info(f"💡 **الإجابة:** {chat_res.text}")
+                    for chunk in chat_stream:
+                        if chunk.text:
+                            full_chat += chunk.text
+                            chat_placeholder.info(f"💡 **الإجابة:** {full_chat}▌")
+                chat_placeholder.info(f"💡 **الإجابة:** {full_chat}")
         else:
             st.warning("🔑 يرجى وضع مفتاح Gemini API Key في الشريط الجانبي لتفعيل محرك التقرير التلقائي والشات الذكي.")
 
-        # د) أدوات التحكم والتجميع الفوري والرسوم البيانية المتقدمة
+        # د) الرسوم البيانية والجداول
         st.markdown('<div class="section-title">⚙️ التجميع الفوري والرسوم البيانية التفاعلية</div>', unsafe_allow_html=True)
         c_sel1, c_sel2 = st.columns(2)
         with c_sel1: group_by_col = st.selectbox("اختر عمود التجميع (X-Axis):", text_cols if text_cols else df.columns.tolist())
@@ -212,7 +230,6 @@ if uploaded_file is not None:
             fig_pie.update_layout(paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)', font_color='#0A3D3A')
             st.plotly_chart(fig_pie, use_container_width=True)
 
-        # هـ) عرض وتصدير الجداول التجميعية
         st.markdown(f'<div class="section-title">📋 الجدول التجميعي المفلتر ({group_by_col})</div>', unsafe_allow_html=True)
         st.dataframe(df_grouped, use_container_width=True)
 
